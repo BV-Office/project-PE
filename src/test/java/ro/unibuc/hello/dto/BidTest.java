@@ -1,9 +1,12 @@
 package ro.unibuc.hello.dto;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import java.time.LocalDateTime;
 
 import static org.junit.jupiter.api.Assertions.*;
+
+@Tag("BiddingFlow")
 
 class BidTest {
 
