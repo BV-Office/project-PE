@@ -19,10 +19,10 @@ public class GreetingsController {
     @Autowired
     private GreetingsService greetingsService;
 
-    @GetMapping("/hello-world")
+    @GetMapping("/hello-worldasd")
     @ResponseBody
     public Greeting sayHello(@RequestParam(name="name", required=false, defaultValue="Stranger") String name) {
-        return greetingsService.hello(name);
+        return greetingsService.hello(name + "Dragan");
     }
 
     @GetMapping("/info")

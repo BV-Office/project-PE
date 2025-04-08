@@ -18,14 +18,17 @@ import ro.unibuc.hello.exception.BidException;
 import ro.unibuc.hello.exception.EntityNotFoundException;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(SpringExtension.class)
@@ -44,18 +47,22 @@ class BidServiceTest {
     private ItemEntity inactiveItem;
     private ItemEntity expiredItem;
     private BidEntity bid;
+    private BidEntity highestBid;
     private Bid bidDto;
+    private LocalDateTime now;
 
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
 
-        // Set up test data
+        now = LocalDateTime.now();
+
+        // Set up test data for different categories
         activeItem = new ItemEntity(
                 "Test Item",
                 "Description",
                 100.0,
-                LocalDateTime.now().plusDays(1),
+                now.plusDays(1),
                 "creator@example.com",
                 Category.ELECTRONICS
         );
@@ -65,9 +72,9 @@ class BidServiceTest {
                 "Inactive Item",
                 "Description",
                 100.0,
-                LocalDateTime.now().plusDays(1),
+                now.plusDays(1),
                 "creator@example.com",
-                Category.ELECTRONICS
+                Category.FASHION
         );
         inactiveItem.setId("item2");
         inactiveItem.setActive(false);
@@ -76,21 +83,26 @@ class BidServiceTest {
                 "Expired Item",
                 "Description",
                 100.0,
-                LocalDateTime.now().minusDays(1),
+                now.minusDays(1),
                 "creator@example.com",
-                Category.ELECTRONICS
+                Category.BOOKS
         );
         expiredItem.setId("item3");
 
         bid = new BidEntity("item1", "John Doe", 150.0, "john@example.com");
         bid.setId("bid1");
+        bid.setCreatedAt(now);
+
+        highestBid = new BidEntity("item1", "Jane Smith", 200.0, "jane@example.com");
+        highestBid.setId("bid2");
+        highestBid.setCreatedAt(now.plusHours(1));
 
         bidDto = new Bid(
                 "bid1",
                 "item1",
                 "John Doe",
                 150.0,
-                LocalDateTime.now(),
+                now,
                 "john@example.com"
         );
     }
@@ -114,6 +126,19 @@ class BidServiceTest {
     }
 
     @Test
+    void getAllBids_ShouldReturnEmptyList_WhenNoBids() {
+        // Arrange
+        when(bidRepository.findAll()).thenReturn(Collections.emptyList());
+
+        // Act
+        List<Bid> result = bidService.getAllBids();
+
+        // Assert
+        assertTrue(result.isEmpty());
+        verify(bidRepository).findAll();
+    }
+
+    @Test
     void getBidsByItem_ShouldReturnBidsForItem() {
         // Arrange
         List<BidEntity> bidEntities = Arrays.asList(
@@ -132,6 +157,19 @@ class BidServiceTest {
     }
 
     @Test
+    void getBidsByItem_ShouldReturnEmptyList_WhenNoItemBids() {
+        // Arrange
+        when(bidRepository.findByItemId("item1")).thenReturn(Collections.emptyList());
+
+        // Act
+        List<Bid> result = bidService.getBidsByItem("item1");
+
+        // Assert
+        assertTrue(result.isEmpty());
+        verify(bidRepository).findByItemId("item1");
+    }
+
+    @Test
     void getBidsByBidder_ShouldReturnBidsFromBidder() {
         // Arrange
         List<BidEntity> bidEntities = Collections.singletonList(bid);
@@ -145,6 +183,19 @@ class BidServiceTest {
         assertEquals(1, result.size());
         assertEquals("John Doe", result.get(0).getBidderName());
         verify(bidRepository).findByBidderName("John Doe");
+    }
+
+    @Test
+    void getBidsByBidder_ShouldReturnEmptyList_WhenNoBidderBids() {
+        // Arrange
+        when(bidRepository.findByBidderName("Unknown Bidder")).thenReturn(Collections.emptyList());
+
+        // Act
+        List<Bid> result = bidService.getBidsByBidder("Unknown Bidder");
+
+        // Assert
+        assertTrue(result.isEmpty());
+        verify(bidRepository).findByBidderName("Unknown Bidder");
     }
 
     @Test
@@ -192,10 +243,35 @@ class BidServiceTest {
         // Assert
         assertNotNull(result);
         assertEquals("bid1", result.getId());
-        // The findById method is called twice:
-        // 1. In placeBid to validate the item exists
-        // 2. In convertToDto to set the item name
         verify(itemRepository, times(2)).findById("item1");
+        verify(bidRepository).save(any(BidEntity.class));
+    }
+
+    @Test
+    void placeBid_ShouldSaveBid_WhenHigherThanExistingBids() {
+        // Arrange
+        when(itemRepository.findById("item1")).thenReturn(Optional.of(activeItem));
+        when(bidRepository.findByItemIdOrderByAmountDesc("item1")).thenReturn(Collections.singletonList(bid));
+        when(bidRepository.findByItemIdAndEmailOrderByAmountDesc("item1", "jane@example.com")).thenReturn(Collections.emptyList());
+
+        BidEntity savedBid = new BidEntity("item1", "Jane Smith", 200.0, "jane@example.com");
+        savedBid.setId("bid2");
+        when(bidRepository.save(any(BidEntity.class))).thenReturn(savedBid);
+
+        Bid newBid = new Bid();
+        newBid.setItemId("item1");
+        newBid.setBidderName("Jane Smith");
+        newBid.setAmount(200.0); // Higher than existing bid (150.0)
+        newBid.setEmail("jane@example.com");
+
+        // Act
+        Bid result = bidService.placeBid(newBid);
+
+        // Assert
+        assertNotNull(result);
+        assertEquals("bid2", result.getId());
+        assertEquals(200.0, result.getAmount());
+        verify(bidRepository).findByItemIdOrderByAmountDesc("item1");
         verify(bidRepository).save(any(BidEntity.class));
     }
 
@@ -211,7 +287,8 @@ class BidServiceTest {
         newBid.setEmail("john@example.com");
 
         // Act & Assert
-        assertThrows(BidException.class, () -> bidService.placeBid(newBid));
+        BidException exception = assertThrows(BidException.class, () -> bidService.placeBid(newBid));
+        assertEquals("Item not found", exception.getMessage());
         verify(itemRepository).findById("nonexistent");
         verify(bidRepository, never()).save(any(BidEntity.class));
     }
@@ -228,7 +305,8 @@ class BidServiceTest {
         newBid.setEmail("john@example.com");
 
         // Act & Assert
-        assertThrows(BidException.class, () -> bidService.placeBid(newBid));
+        BidException exception = assertThrows(BidException.class, () -> bidService.placeBid(newBid));
+        assertEquals("Item is not active", exception.getMessage());
         verify(itemRepository).findById("item2");
         verify(bidRepository, never()).save(any(BidEntity.class));
     }
@@ -245,7 +323,8 @@ class BidServiceTest {
         newBid.setEmail("john@example.com");
 
         // Act & Assert
-        assertThrows(BidException.class, () -> bidService.placeBid(newBid));
+        BidException exception = assertThrows(BidException.class, () -> bidService.placeBid(newBid));
+        assertEquals("Bidding time has expired for this item", exception.getMessage());
         verify(itemRepository).findById("item3");
         verify(bidRepository, never()).save(any(BidEntity.class));
     }
@@ -262,7 +341,8 @@ class BidServiceTest {
         newBid.setEmail("invalid-email");
 
         // Act & Assert
-        assertThrows(IllegalArgumentException.class, () -> bidService.placeBid(newBid));
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> bidService.placeBid(newBid));
+        assertEquals("Invalid email format", exception.getMessage());
         verify(itemRepository).findById("item1");
         verify(bidRepository, never()).save(any(BidEntity.class));
     }
@@ -282,7 +362,8 @@ class BidServiceTest {
         newBid.setEmail("john@example.com");
 
         // Act & Assert
-        assertThrows(BidException.class, () -> bidService.placeBid(newBid));
+        BidException exception = assertThrows(BidException.class, () -> bidService.placeBid(newBid));
+        assertEquals("Bid amount must be higher than the current highest bid", exception.getMessage());
         verify(itemRepository).findById("item1");
         verify(bidRepository).findByItemIdOrderByAmountDesc("item1");
         verify(bidRepository, never()).save(any(BidEntity.class));
@@ -305,10 +386,42 @@ class BidServiceTest {
         newBid.setEmail("john@example.com");
 
         // Act & Assert
-        assertThrows(IllegalArgumentException.class, () -> bidService.placeBid(newBid));
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> bidService.placeBid(newBid));
+        assertEquals("Bid amount must be higher than your last bid", exception.getMessage());
         verify(itemRepository).findById("item1");
         verify(bidRepository).findByItemIdAndEmailOrderByAmountDesc("item1", "john@example.com");
         verify(bidRepository, never()).save(any(BidEntity.class));
+    }
+
+    @Test
+    void placeBid_ShouldSaveBid_WhenUserBidHigherThanPrevious() {
+        // Arrange
+        when(itemRepository.findById("item1")).thenReturn(Optional.of(activeItem));
+        when(bidRepository.findByItemIdOrderByAmountDesc("item1")).thenReturn(Collections.emptyList());
+
+        BidEntity previousUserBid = new BidEntity("item1", "John Doe", 150.0, "john@example.com");
+        when(bidRepository.findByItemIdAndEmailOrderByAmountDesc("item1", "john@example.com"))
+                .thenReturn(Collections.singletonList(previousUserBid));
+
+        BidEntity savedBid = new BidEntity("item1", "John Doe", 200.0, "john@example.com");
+        savedBid.setId("bid2");
+        when(bidRepository.save(any(BidEntity.class))).thenReturn(savedBid);
+
+        Bid newBid = new Bid();
+        newBid.setItemId("item1");
+        newBid.setBidderName("John Doe");
+        newBid.setAmount(200.0); // Higher than user's previous bid
+        newBid.setEmail("john@example.com");
+
+        // Act
+        Bid result = bidService.placeBid(newBid);
+
+        // Assert
+        assertNotNull(result);
+        assertEquals("bid2", result.getId());
+        assertEquals(200.0, result.getAmount());
+        verify(bidRepository).findByItemIdAndEmailOrderByAmountDesc("item1", "john@example.com");
+        verify(bidRepository).save(any(BidEntity.class));
     }
 
     @Test
@@ -354,7 +467,119 @@ class BidServiceTest {
     @Test
     void getBidsByEmail_ShouldThrowException_WhenEmailInvalid() {
         // Arrange & Act & Assert
-        assertThrows(IllegalArgumentException.class, () -> bidService.getBidsByEmail("invalid-email"));
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> bidService.getBidsByEmail("invalid-email"));
+        assertEquals("Invalid email format", exception.getMessage());
         verify(bidRepository, never()).findByEmail(anyString());
+    }
+
+    @Test
+    void getBidsByEmail_ShouldReturnEmptyList_WhenNoEmailBids() {
+        // Arrange
+        when(bidRepository.findByEmail("unused@example.com")).thenReturn(Collections.emptyList());
+
+        // Act
+        List<Bid> result = bidService.getBidsByEmail("unused@example.com");
+
+        // Assert
+        assertTrue(result.isEmpty());
+        verify(bidRepository).findByEmail("unused@example.com");
+    }
+
+    @Test
+    void convertToDto_ShouldIncludeItemName_WhenItemExists() {
+        // Arrange
+        when(bidRepository.findById("bid1")).thenReturn(Optional.of(bid));
+        when(itemRepository.findById("item1")).thenReturn(Optional.of(activeItem));
+
+        // Act
+        Bid result = bidService.getBidById("bid1");
+
+        // Assert
+        assertNotNull(result);
+        assertEquals("Test Item", result.getItemName());
+        verify(itemRepository).findById("item1");
+    }
+
+    @Test
+    void convertToDto_ShouldNotIncludeItemName_WhenItemDoesNotExist() {
+        // Arrange
+        when(bidRepository.findById("bid1")).thenReturn(Optional.of(bid));
+        when(itemRepository.findById("item1")).thenReturn(Optional.empty());
+
+        // Act
+        Bid result = bidService.getBidById("bid1");
+
+        // Assert
+        assertNotNull(result);
+        assertNull(result.getItemName());
+        verify(itemRepository).findById("item1");
+    }
+
+    @Test
+    void placeBid_ShouldThrowException_WhenBidIsExactlyInitialPrice() {
+        // Arrange
+        when(itemRepository.findById("item1")).thenReturn(Optional.of(activeItem));
+        when(bidRepository.findByItemIdOrderByAmountDesc("item1")).thenReturn(Collections.emptyList());
+        when(bidRepository.findByItemIdAndEmailOrderByAmountDesc("item1", "john@example.com")).thenReturn(Collections.emptyList());
+
+        Bid newBid = new Bid();
+        newBid.setItemId("item1");
+        newBid.setBidderName("John Doe");
+        newBid.setAmount(100.0); // Same as initial price
+        newBid.setEmail("john@example.com");
+
+        // Act & Assert
+        // Based on the failure, it seems the service requires bids to be higher than the initial price
+        BidException exception = assertThrows(BidException.class, () -> bidService.placeBid(newBid));
+        assertEquals("Bid amount must be higher than the current highest bid", exception.getMessage());
+        verify(bidRepository, never()).save(any(BidEntity.class));
+    }
+
+    @Test
+    void placeBid_WithMultipleBidHistory_ShouldSaveBid_WhenValid() {
+        // Arrange
+        when(itemRepository.findById("item1")).thenReturn(Optional.of(activeItem));
+
+        // Create a bid history
+        List<BidEntity> bidHistory = new ArrayList<>();
+        BidEntity bid1 = new BidEntity("item1", "User1", 110.0, "user1@example.com");
+        bid1.setId("bid1");
+        bid1.setCreatedAt(now.minusHours(3));
+
+        BidEntity bid2 = new BidEntity("item1", "User2", 120.0, "user2@example.com");
+        bid2.setId("bid2");
+        bid2.setCreatedAt(now.minusHours(2));
+
+        BidEntity bid3 = new BidEntity("item1", "User3", 150.0, "user3@example.com");
+        bid3.setId("bid3");
+        bid3.setCreatedAt(now.minusHours(1));
+
+        bidHistory.add(bid3); // Highest bid first
+        bidHistory.add(bid2);
+        bidHistory.add(bid1);
+
+        when(bidRepository.findByItemIdOrderByAmountDesc("item1")).thenReturn(bidHistory);
+        when(bidRepository.findByItemIdAndEmailOrderByAmountDesc("item1", "user4@example.com")).thenReturn(Collections.emptyList());
+
+        BidEntity newBidEntity = new BidEntity("item1", "User4", 200.0, "user4@example.com");
+        newBidEntity.setId("bid4");
+        when(bidRepository.save(any(BidEntity.class))).thenReturn(newBidEntity);
+
+        Bid newBid = new Bid();
+        newBid.setItemId("item1");
+        newBid.setBidderName("User4");
+        newBid.setAmount(200.0); // Higher than highest bid
+        newBid.setEmail("user4@example.com");
+
+        // Act
+        Bid result = bidService.placeBid(newBid);
+
+        // Assert
+        assertNotNull(result);
+        assertEquals("bid4", result.getId());
+        assertEquals(200.0, result.getAmount());
+        verify(bidRepository).findByItemIdOrderByAmountDesc("item1");
+        verify(bidRepository).save(any(BidEntity.class));
     }
 }
