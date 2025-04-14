@@ -1,14 +1,65 @@
 pipeline {
     agent any
-    environment {
-        DOCKER_PASSWORD = credentials("docker_password")
+    
+    tools {
+        jdk 'jdk21' // This name must match the JDK installation name used in Jenkins Global Tool Configuration
     }
-
+    
+    environment {
+        DOCKER_PASSWORD = credentials("alphaphantom26")
+        DOCKER_USERNAME = 'your_dockerhub_username' // Replace with your actual DockerHub username
+    }
+    
     stages {
         stage('Build & Test') {
             steps {
                 sh './gradlew clean build'
             }
+        }
+        
+        stage('Tag Image') {
+            steps {
+                script {
+                    GIT_TAG = sh(script: 'git fetch --tags && git tag | sort -V | tail -1', returnStdout: true).trim()
+                    if (GIT_TAG) {
+                        MAJOR_VERSION = sh(script: "echo ${GIT_TAG} | cut -d . -f 1", returnStdout: true).trim()
+                        MINOR_VERSION = sh(script: "echo ${GIT_TAG} | cut -d . -f 2", returnStdout: true).trim()
+                        PATCH_VERSION = sh(script: "echo ${GIT_TAG} | cut -d . -f 3", returnStdout: true).trim()
+                        IMAGE_TAG = "${MAJOR_VERSION}.$((${MINOR_VERSION} + 1)).${PATCH_VERSION}"
+                    } else {
+                        IMAGE_TAG = "1.0.0" // Default tag if no git tags exist
+                    }
+                    
+                    echo "Building Docker image with tag: ${IMAGE_TAG}"
+                }
+                sh "docker build -t ${DOCKER_USERNAME}/hello-img:${IMAGE_TAG} ."
+            }
+        }
+        
+        stage('Publish to DockerHub') {
+            steps {
+                script {
+                    // Login to DockerHub
+                    sh "echo ${DOCKER_PASSWORD} | docker login -u ${DOCKER_USERNAME} --password-stdin"
+                    
+                    // Push the tagged image
+                    sh "docker push ${DOCKER_USERNAME}/hello-img:${IMAGE_TAG}"
+                    
+                    // Also tag and push as 'latest'
+                    sh "docker tag ${DOCKER_USERNAME}/hello-img:${IMAGE_TAG} ${DOCKER_USERNAME}/hello-img:latest"
+                    sh "docker push ${DOCKER_USERNAME}/hello-img:latest"
+                    
+                    // Logout from DockerHub
+                    sh "docker logout"
+                }
+            }
+        }
+    }
+    
+    post {
+        always {
+            // Clean up Docker images to avoid filling up disk space
+            sh "docker system prune -f"
         }
     }
 }
