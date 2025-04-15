@@ -8,7 +8,8 @@ pipeline {
     environment {
         DOCKER_PASSWORD = credentials("docker_password")
         GITHUB_TOKEN = credentials("github_token")
-        DOCKER_USERNAME = 'your_dockerhub_username' // Replace with your actual DockerHub username
+        // Use the username from the Docker credentials instead of hardcoding it
+        DOCKER_USERNAME = "${DOCKER_PASSWORD_USR}"
     }
     
     stages {
@@ -70,8 +71,20 @@ pipeline {
                     // Start the application and database containers
                     sh "IMAGE_TAG=${env.IMAGE_TAG} docker compose up -d hello mongo"
                     
+                    // Wait for services to be fully ready
+                    sh "sleep 20"
+                    
                     // Verify deployment
                     echo "Application deployed with image tag: ${env.IMAGE_TAG}"
+                }
+            }
+        }
+        
+        stage('Run Integration Tests') {
+            steps {
+                script {
+                    // Run the integration tests
+                    sh "./gradlew testIT"
                 }
             }
         }
@@ -81,6 +94,12 @@ pipeline {
         always {
             // Clean up Docker images to avoid filling up disk space
             sh "docker system prune -f"
+        }
+        success {
+            echo "Pipeline completed successfully!"
+        }
+        failure {
+            echo "Pipeline failed. Please check the logs for details."
         }
     }
 }
