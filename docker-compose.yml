@@ -1,6 +1,6 @@
 services:
   hello:
-    image: alphaphantom26/hello-img:${IMAGE_TAG:-latest}
+    image: victor262626/hello-img:${IMAGE_TAG:-latest}
     # 'build: .' line removed as instructed
     ports:
       - 8080:8080

@@ -28,7 +28,7 @@ pipeline {
                     
                     echo "Building Docker image with tag: ${env.IMAGE_TAG}"
                 }
-                sh "docker build -t alphaphantom26/hello-img:${env.IMAGE_TAG} ."
+                sh "docker build -t victor262626/hello-img:${env.IMAGE_TAG} ."
             }
         }
         
@@ -39,11 +39,11 @@ pipeline {
                     sh "echo ${DOCKER_PASSWORD_PSW} | docker login -u ${DOCKER_PASSWORD_USR} --password-stdin"
                     
                     // Push the tagged image
-                    sh "docker push alphaphantom26/hello-img:${env.IMAGE_TAG}"
+                    sh "docker push victor262626/hello-img:${env.IMAGE_TAG}"
                     
                     // Also tag and push as 'latest'
-                    sh "docker tag alphaphantom26/hello-img:${env.IMAGE_TAG} alphaphantom26/hello-img:latest"
-                    sh "docker push alphaphantom26/hello-img:latest"
+                    sh "docker tag victor262626/hello-img:${env.IMAGE_TAG} victor262626/hello-img:latest"
+                    sh "docker push victor262626/hello-img:latest"
                     
                     // Add git tag and push to repository
                     sh "git tag ${env.IMAGE_TAG}"
