@@ -15,7 +15,8 @@ pipeline {
     stages {
         stage('Build & Test') {
             steps {
-                sh './gradlew clean build'
+                // Run unit tests and integration tests in one command
+                sh './gradlew clean build testIT'
             }
         }
         
@@ -80,14 +81,7 @@ pipeline {
             }
         }
         
-        stage('Run Integration Tests') {
-            steps {
-                script {
-                    // Run the integration tests
-                    sh "./gradlew testIT"
-                }
-            }
-        }
+        // Removed separate integration test stage as we're now running them in the Build & Test stage
     }
     
     post {
