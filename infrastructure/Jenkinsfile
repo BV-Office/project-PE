@@ -25,7 +25,8 @@ pipeline {
                 }
                 sh "docker build -t podenimea27/hello-img:${MAJOR_VERSION}.\$((${MINOR_VERSION} + 1)).${PATCH_VERSION} ."
                 sh "git tag ${env.IMAGE_TAG}"
-                sh "git push https://$GITHUB_TOKEN@github.com/BV-Office/service.git ${env.IMAGE_TAG}"
+                // Replace BV-Office and project-PE.git with env vars if you defined them
+sh "git push https://$GITHUB_TOKEN@github.com/BV-Office/project-PE.git ${env.IMAGE_TAG}"
             }
         }
         
