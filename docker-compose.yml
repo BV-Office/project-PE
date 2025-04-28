@@ -1,14 +1,17 @@
 services:
   hello:
-    image: ${DOCKER_PASSWORD_USR}/hello-img:${IMAGE_TAG}
+    image: hello-img
+    build: .
     ports:
       - 8080:8080
-      # Port for debug
-      - 5005:5005
     environment:
       ENVIRONMENT_NAME: local
       MONGODB_CONECTION_URL: mongodb://root:example@mongo:27017/
     restart: always
+    logging:
+      driver: loki
+      options:
+        loki-url: "http://loki:3100/loki/api/v1/push"
     profiles:
       - "hello-service"
   jenkins:
@@ -18,24 +21,24 @@ services:
       - 50000:50000
     restart: on-failure
     volumes:
-      - /workspaces/jenkins_config:/var/jenkins_home
       - /var/run/docker.sock:/var/run/docker.sock
       - /usr/bin/docker:/usr/bin/docker
       - ./Dockerfile:/Dockerfile
-      - /usr/libexec/docker/cli-plugins/docker-compose:/usr/libexec/docker/cli-plugins/docker-compose
     profiles:
       - "hello-service"
     user: 0:0
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
   mongo:
-    image: mongo:6.0.20
+    image: mongo:5.0.2
     restart: always
     ports:
       - 27017:27017
     environment:
       MONGO_INITDB_ROOT_USERNAME: root
       MONGO_INITDB_ROOT_PASSWORD: example
+    logging:
+      driver: loki
+      options:
+        loki-url: "http://loki:3100/loki/api/v1/push"
     profiles:
       - "mongo"
   mongo-admin-ui:
@@ -49,11 +52,15 @@ services:
       ME_CONFIG_MONGODB_URL: mongodb://root:example@mongo:27017/
       ME_CONFIG_BASICAUTH_USERNAME: unibuc
       ME_CONFIG_BASICAUTH_PASSWORD: adobe
+    logging:
+      driver: loki
+      options:
+        loki-url: "http://loki:3100/loki/api/v1/push"
     profiles:
       - "mongo"
 # MONITORING SERVICES
   cadvisor: # container metric prometheus exporter
-    image: gcr.io/cadvisor/cadvisor:v0.51.0
+    image: gcr.io/cadvisor/cadvisor:v0.47.1
     container_name: cadvisor
     ports:
       - "8081:8080"
@@ -75,7 +82,7 @@ services:
     profiles:
       - "monitoring"
   loki:
-    image: grafana/loki:3.3.2
+    image: grafana/loki:2.4.1
     ports:
       - 3100:3100
     volumes:
@@ -84,7 +91,7 @@ services:
     profiles:
       - "monitoring"
   prometheus: # metrics aggregation and alert definition server (prometheus server)
-    image: prom/prometheus:v3.1.0
+    image: prom/prometheus:v2.33.4
     volumes:
       - ./infrastructure/prometheus/:/etc/prometheus/
     command:
@@ -99,7 +106,7 @@ services:
     profiles:
       - "monitoring"
   alertmanager: # alert manager (prometheus)
-    image: prom/alertmanager:v0.28.0
+    image: prom/alertmanager:v0.23.0
     volumes:
       - ./infrastructure/alertmanager/:/config/
     command: --config.file=/config/alertmanager.yml --log.level=debug
@@ -112,7 +119,7 @@ services:
     profiles:
       - "monitoring"
   grafana: # dashboard visualisation tool (metrics & logs)
-    image: grafana/grafana:11.4.0
+    image: grafana/grafana:8.4.3
     volumes:
       - ./infrastructure/grafana/provisioning:/etc/grafana/provisioning
       - ./infrastructure/grafana/dashboards:/etc/grafana/dashboards
