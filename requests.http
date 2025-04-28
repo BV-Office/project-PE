@@ -110,7 +110,7 @@ POST {{baseUrl}}/bids
 Content-Type: application/json
 
 {
-  "itemId": "{{itemId}}",
+  "itemId": "67f45b5097333c15e7357477",
   "bidderName": "John Doe",
   "amount": 850.00,
   "email": "{{userEmail}}"
@@ -150,7 +150,7 @@ GET {{baseUrl}}/stats/overview
 Accept: application/json
 
 ### Get user statistics
-GET {{baseUrl}}/stats/user/{{userEmail}}
+GET {{baseUrl}}/stats/user/user@example.com
 Accept: application/json
 
 ### Get creator statistics

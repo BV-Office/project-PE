@@ -1,7 +1,6 @@
 services:
   hello:
-    image: victor262626/hello-img:${IMAGE_TAG:-latest}
-    # 'build: .' line removed as instructed
+    image: ${DOCKER_PASSWORD_USR}/hello-img:${IMAGE_TAG}
     ports:
       - 8080:8080
       # Port for debug
@@ -52,7 +51,7 @@ services:
       ME_CONFIG_BASICAUTH_PASSWORD: adobe
     profiles:
       - "mongo"
-# MONITORING SERVICES
+  # MONITORING SERVICES
   cadvisor: # container metric prometheus exporter
     image: gcr.io/cadvisor/cadvisor:v0.51.0
     container_name: cadvisor
@@ -134,7 +133,7 @@ services:
       driver: loki
       options:
         loki-url: "http://loki:3100/loki/api/v1/push"
-    
+
   wrk-injector-info-perf: # traffic injector (high)
     image: mtchavez/docker-wrk
     profiles:
