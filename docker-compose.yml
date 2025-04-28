@@ -1,6 +1,7 @@
 services:
   hello:
-    image: ${DOCKER_PASSWORD_USR}/hello-img:${IMAGE_TAG}
+    image: hello-img
+    build: .
     ports:
       - 8080:8080
       # Port for debug
@@ -26,8 +27,6 @@ services:
     profiles:
       - "hello-service"
     user: 0:0
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
   mongo:
     image: mongo:6.0.20
     restart: always
