@@ -15,8 +15,17 @@ import org.mockito.Mock;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
+import org.mockito.MockitoAnnotations;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.ResponseEntity;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.servlet.HandlerExceptionResolver;
+import org.springframework.web.servlet.mvc.method.annotation.ExceptionHandlerExceptionResolver;
+import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
 import ro.unibuc.hello.dto.Item;
 import ro.unibuc.hello.exception.EntityNotFoundException;
@@ -32,10 +41,29 @@ class ItemControllerTest {
     private ItemController itemController;
 
     private Item sampleItem;
+    private MockMvc mockMvc;
+    private ObjectMapper objectMapper;
 
     @BeforeEach
     void setUp() {
-        sampleItem = new Item("1", "Test Item", "Description", 100.0, LocalDateTime.now().plusDays(1), true, "test@example.com", null);
+        MockitoAnnotations.openMocks(this);
+        mockMvc = MockMvcBuilders.standaloneSetup(itemController)
+            .setHandlerExceptionResolvers(createExceptionResolver())
+            .build();
+        
+        objectMapper = new ObjectMapper();
+        objectMapper.registerModule(new JavaTimeModule());
+        
+        sampleItem = new Item("1", "Test Item", "Description", 100.0, 
+                             LocalDateTime.now().plusDays(1), true, 
+                             "test@example.com", null);
+    }
+
+    private HandlerExceptionResolver createExceptionResolver() {
+        ExceptionHandlerExceptionResolver exceptionResolver = new ExceptionHandlerExceptionResolver();
+        exceptionResolver.setMessageConverters(List.of(new MappingJackson2HttpMessageConverter()));
+        exceptionResolver.afterPropertiesSet();
+        return exceptionResolver;
     }
 
     @Test
@@ -46,6 +74,7 @@ class ItemControllerTest {
         assertEquals(1, response.getBody().size());
     }
 
+    // Rest of test methods remain the same...
     @Test
     void getItemById_ShouldReturnItem() {
         when(itemService.getItemById("1")).thenReturn(sampleItem);
@@ -133,5 +162,4 @@ class ItemControllerTest {
         ResponseEntity<Item> response = itemController.updateItem("1", sampleItem);
         assertEquals(400, response.getStatusCode().value());
     }
-
 }
